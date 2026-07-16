@@ -31,8 +31,8 @@ Unlike standard data-sharing tools, `writeinput` v3.0.0 is engineered for **bit-
 You can install `writeinput` by cloning this repository or manually placing `writeinput.ado` and `writeinput.sthlp` in your `personal/w/` folder.
 
 ```stata
-* Installation via net (once hosted):
-* net install writeinput, from("https://raw.githubusercontent.com/ericabooth/writeinput-stata/main/")
+net install writeinput, from("https://raw.githubusercontent.com/ericabooth/writeinput-stata/main/") replace force
+help writeinput
 ```
 
 ---
