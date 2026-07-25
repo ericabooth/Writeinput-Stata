@@ -1,0 +1,4 @@
+v 3
+d writeinput: turn the data in memory into a self-contained, reproducible input command block
+d Eric A. Booth, Sr Researcher, Texas 2036, eric.a.booth@gmail.com
+p writeinput

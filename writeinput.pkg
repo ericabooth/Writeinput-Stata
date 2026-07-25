@@ -1,0 +1,23 @@
+v 3
+d writeinput: turn the data in memory into a self-contained, reproducible input command block
+d
+d writeinput converts the data in memory, or a filtered subset of it, into an
+d input command a reader can paste to reconstruct the dataset exactly - the
+d standard way to post a minimum working example on Statalist or Stack Overflow.
+d It is built for bit-for-bit fidelity: precision(hex) writes doubles as %21x so
+d nothing is lost in the round trip, extended missing values (.a through .z) are
+d detected and preserved, and every string is wrapped in compound double quotes
+d so internal quotes and backticks cannot break the block.  Works with frames,
+d if/in, and random sample drawing; variable labels can be emitted as comments
+d and value labels decoded into the example.  Output goes to a .do file, to the
+d results window (dryrun), or as a fenced code block for GitHub (markdown).
+d
+d Requires: Stata 16.0 or newer
+d
+d Author: Eric A. Booth, Sr Researcher, Texas 2036
+d Support: eric.a.booth@gmail.com
+d
+d Distribution-Date: 20260725
+d
+f writeinput.ado
+f writeinput.sthlp

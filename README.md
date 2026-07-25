@@ -28,12 +28,18 @@ Unlike standard data-sharing tools, `writeinput` v3.0.0 is engineered for **bit-
 
 ## 🛠️ Installation
 
-You can install `writeinput` by cloning this repository or manually placing `writeinput.ado` and `writeinput.sthlp` in your `personal/w/` folder.
+Install from GitHub in Stata:
 
 ```stata
-net install writeinput, from("https://raw.githubusercontent.com/ericabooth/writeinput-stata/main/") replace force
+net install writeinput, from("https://raw.githubusercontent.com/ericabooth/Writeinput-Stata/main/") replace force
+discard
+which writeinput
 help writeinput
 ```
+
+The repository ships `writeinput.pkg` and `stata.toc`, so the command and its
+help file arrive in one call. To install by hand instead, copy `writeinput.ado`
+and `writeinput.sthlp` into your `personal/w/` folder.
 
 ---
 
@@ -82,6 +88,7 @@ writeinput age inc race, sample(20) seed(123) sort(age) generic markdown
 ## 👤 Author
 
 **Eric A. Booth**
+- 🏛️ Sr Researcher, Texas 2036
 - 📧 [eric.a.booth@gmail.com](mailto:eric.a.booth@gmail.com)
 - 🌐 [www.eric-booth.com](http://www.eric-booth.com)
 - 💼 [GitHub Profile](https://github.com/ericabooth)
