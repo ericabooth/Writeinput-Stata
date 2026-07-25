@@ -42,7 +42,7 @@ program define writeinput, rclass
     }
 
     *-- Filter data
-    marksample touse
+    marksample touse, strok
     
     qui {
         preserve
@@ -59,12 +59,12 @@ program define writeinput, rclass
 
         *-- Handle Maxobs
         loc truncated = 0
-        if `maxobs' > 0 & `_N' > `maxobs' {
+        if `maxobs' > 0 & _N > `maxobs' {
             keep in 1/`maxobs'
             loc truncated = 1
         }
 
-        if `_N' == 0 {
+        if _N == 0 {
             di as err "no observations"
             restore
             if "`original_frame'" != "" frame change `original_frame'
@@ -114,13 +114,6 @@ program define writeinput, rclass
             file open `mh' using "`using'", `file_mode' text
         }
 
-        *-- Helper program to write to both file and screen
-        *-- Added markdown wrapping support
-        program define _sv_write
-            args fh line dryrun markdown
-            if "`fh'" != "" file write `fh' `"`line'"' _n
-            if "`dryrun'" != "" | "`markdown'" != "" di as txt `"`line'"'
-        end
 
         if "`markdown'" != "" di as txt "```stata"
         if "`dryrun'" != "" | "`markdown'" != "" {
@@ -202,7 +195,7 @@ program define writeinput, rclass
         
         *-- Post results
         return local filename "`using'"
-        return scalar nobs = `_N'
+        return scalar nobs = _N
         return scalar nvars = `: word count `varlist''
         return local varlist "`varlist'"
         return scalar truncated = `truncated'
@@ -210,4 +203,14 @@ program define writeinput, rclass
         restore
         if "`original_frame'" != "" frame change `original_frame'
     }
+end
+
+
+*-- Helper: write a line to the file and/or the screen.
+*-- Defined at file scope: a nested "program define" would close
+*-- writeinput at its inner "end" and orphan the rest of the file.
+program define _sv_write
+args fh line dryrun markdown
+capture file write `fh' `"`line'"' _n
+if "`dryrun'" != "" | "`markdown'" != "" di as txt `"`line'"'
 end
