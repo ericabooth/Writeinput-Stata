@@ -34,7 +34,7 @@ help for {hi:writeinput}
 {title:Description}
 
 {p 4 4 2}
-{cmd:writeinput} (v3.0.0) is a robust utility for generating reproducible Stata 
+{cmd:writeinput} (v3.0.1) is a robust utility for generating reproducible Stata
 {help input} code from data currently in memory. It is specifically designed to 
 facilitate sharing "Minimum Working Examples" (MWEs) on forums like Statalist 
 or technical support emails.

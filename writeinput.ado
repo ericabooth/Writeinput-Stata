@@ -1,6 +1,7 @@
 *! writeinput - advanced dataset-to-input command generator
 *! Eric A. Booth <eric.a.booth@gmail.com>
-*! Version 3.0.0 : May 2026
+*! Version 3.0.1 : Jul 2026
+** Version 3.0.0 : May 2026
 ** Version 2.0.0 : May 2026
 ** Version 1.0.1 : Mar 2011
 
@@ -33,7 +34,7 @@ program define writeinput, rclass
     if "`using'" != "" {
         loc check : subinstr local using ".do" "", count(loc howmany)
         if "`howmany'" == "0" loc using "`using'.do"
-        
+
         cap confirm file `"`using'"'
         if !_rc & "`replace'" == "" & "`append'" == "" {
             di as err "File `using' exists; specify 'replace' or 'append' option"
@@ -41,13 +42,23 @@ program define writeinput, rclass
         }
     }
 
-    *-- Filter data
-    marksample touse, strok
-    
+    *-- Validate precision() early so Mata never sees a bad format
+    if "`precision'" != "" & "`precision'" != "hex" {
+        cap loc pchk = string(1, "`precision'")
+        if _rc | "`pchk'" == "" {
+            di as err "invalid precision() format: `precision'"
+            exit 120
+        }
+    }
+
+    *-- Filter data (novarlist: rows with missing values must be kept,
+    *-- else they silently vanish from the serialized dataset)
+    marksample touse, strok novarlist
+
     qui {
         preserve
         keep if `touse'
-        
+
         *-- Handle Sample/Seed
         if `sample' > 0 {
             if `seed' > 0 set seed `seed'
@@ -65,7 +76,7 @@ program define writeinput, rclass
         }
 
         if _N == 0 {
-            di as err "no observations"
+            noi di as err "no observations"
             restore
             if "`original_frame'" != "" frame change `original_frame'
             exit 2000
@@ -107,92 +118,26 @@ program define writeinput, rclass
             }
         }
 
-        *-- Prepare file handling
-        tempname mh
-        if "`using'" != "" {
-            loc file_mode = cond("`append'" != "", "append", "write")
-            file open `mh' using "`using'", `file_mode' text
-        }
-
-
-        if "`markdown'" != "" di as txt "```stata"
-        if "`dryrun'" != "" | "`markdown'" != "" {
-            di as txt "{hline}" 
-            di as txt "{title:Generated Input Command}" 
-            if `truncated' di as res "** Truncated to `maxobs' observations **"
-            di as txt "{hline}"
-        }
-
-        *-- Header Block
-        if `"`header'"' != "" _sv_write `mh' `"`header'"' "`dryrun'" "`markdown'"
-        if "`clear'" != "noclear" _sv_write `mh' "clear" "`dryrun'" "`markdown'"
-        
-        *-- Variable Labels as comments
-        if "`varlab'" != "" {
-            foreach v in `varlist' {
-                loc vl : var label `v'
-                if `"`vl'"' != "" _sv_write `mh' `"** var: `v'  label: `vl'"' "`dryrun'" "`markdown'"
-            }
-        }
-
         *-- Input Statement
-        loc inp_line "input "
+        loc inp_line "input"
         foreach v in `varlist' {
             loc type : type `v'
-            if substr("`type'", 1, 3) == "str" {
-                loc inp_line "`inp_line' `type' `v'"
-            }
-            else {
-                * Precision control: use double for double, or hex if requested
-                if "`type'" == "double" & "`precision'" == "hex" {
-                    loc inp_line "`inp_line' double `v'"
-                }
-                else loc inp_line "`inp_line' `type' `v'"
-            }
-        }
-        _sv_write `mh' "`inp_line'" "`dryrun'" "`markdown'"
-
-        *-- Data Rows
-        forval n = 1/`=_N' {
-            loc row ""
-            foreach v in `varlist' {
-                loc val = `v'[`n']
-                cap confirm string variable `v'
-                if !_rc {
-                    * Precision: String escaping with compound double quotes
-                    loc row `"`row' `"`val'"'"'
-                }
-                else {
-                    * Precision: Extended missing values (.a, .b, ...)
-                    loc sval = string(`val')
-                    * Precision: Hex for doubles if requested
-                    if "`: type `v''" == "double" & "`precision'" == "hex" {
-                        loc sval = string(`val', "%21x")
-                    }
-                    else if "`precision'" != "" {
-                        loc sval = string(`val', "`precision'")
-                    }
-                    loc row "`row' `sval'"
-                }
-            }
-            _sv_write `mh' "`row'" "`dryrun'" "`markdown'"
+            loc inp_line "`inp_line' `type' `v'"
         }
 
-        *-- Footer
-        _sv_write `mh' "end" "`dryrun'" "`markdown'"
-        if `"`note'"' != "" _sv_write `mh' `"** `note'"' "`dryrun'" "`markdown'"
-        if `truncated' _sv_write `mh' "** Truncated to `maxobs' observations" "`dryrun'" "`markdown'"
-
-        if "`dryrun'" != "" | "`markdown'" != "" {
-            di as txt "{hline}"
-        }
-        if "`markdown'" != "" di as txt "```"
+        *-- Emit everything (file and/or screen) in Mata.  Data values,
+        *-- header(), and note() text reach the output via st_local()/
+        *-- st_sdata(), which the macro processor never re-expands, so
+        *-- $, `, and embedded quotes in the data survive verbatim.
+        *-- (Values containing the sequence  "'  still cannot be quoted;
+        *-- that is a limitation of Stata's input syntax itself.)
+        loc file_mode = cond("`append'" != "", "a", "w")
+        noi mata: _writeinput_emit()
 
         if "`using'" != "" {
-            file close `mh'
-            di as smcl _n "Output file written to: {browse `using'}"
+            noi di as smcl _n "Output file written to: {browse `using'}"
         }
-        
+
         *-- Post results
         return local filename "`using'"
         return scalar nobs = _N
@@ -206,11 +151,117 @@ program define writeinput, rclass
 end
 
 
-*-- Helper: write a line to the file and/or the screen.
-*-- Defined at file scope: a nested "program define" would close
-*-- writeinput at its inner "end" and orphan the rest of the file.
-program define _sv_write
-args fh line dryrun markdown
-capture file write `fh' `"`line'"' _n
-if "`dryrun'" != "" | "`markdown'" != "" di as txt `"`line'"'
+version 16
+mata:
+
+// write one generated line to the file and/or the screen
+void _writeinput_put(real scalar fh, real scalar scrn, string scalar s)
+{
+    if (fh >= 0) fput(fh, s)
+    if (scrn) printf("{txt}%s\n", s)
+}
+
+// serialize one numeric value; strofreal() maps ., .a, ... correctly
+string scalar _writeinput_num(real scalar x, string scalar type,
+    string scalar prec)
+{
+    if (prec == "hex") return(strofreal(x, "%21x"))
+    if (prec != "")    return(strofreal(x, prec))
+    // defaults are round-trip exact: %12.0g covers byte/int/long/float,
+    // doubles need up to 17 significant digits
+    if (type == "double") return(strofreal(x, "%21.0g"))
+    return(strofreal(x, "%12.0g"))
+}
+
+void _writeinput_emit()
+{
+    string scalar    fn, dry, md, prec, s, line, cqo, cqc
+    string rowvector vars
+    real rowvector   idx
+    real scalar      fh, scrn, i, j, nv, N
+
+    fn   = st_local("using")
+    dry  = st_local("dryrun")
+    md   = st_local("markdown")
+    prec = st_local("precision")
+    vars = tokens(st_local("varlist"))
+    idx  = st_varindex(vars)
+    nv   = cols(vars)
+    N    = st_nobs()
+    scrn = (dry != "" | md != "")
+    cqo  = char(96) + char(34)      // `"
+    cqc  = char(34) + char(39)      // "'
+
+    fh = -1
+    if (fn != "") {
+        if (st_local("file_mode") == "w") _unlink(fn)
+        fh = _fopen(fn, st_local("file_mode"))
+        if (fh < 0) {
+            errprintf("file %s could not be opened\n", fn)
+            exit(error(603))
+        }
+    }
+
+    // screen-only decorations
+    if (md != "") _writeinput_put(-1, scrn, "```stata")
+    else if (dry != "") {
+        printf("{txt}{hline}\n")
+        printf("{txt}{title:Generated Input Command}\n")
+        if (st_local("truncated") == "1") {
+            printf("{res}** Truncated to %s observations **\n",
+                st_local("maxobs"))
+        }
+        printf("{txt}{hline}\n")
+    }
+
+    // header block
+    if (st_local("header") != "") _writeinput_put(fh, scrn, st_local("header"))
+    if (st_local("clear") != "noclear") _writeinput_put(fh, scrn, "clear")
+
+    // variable labels as comments
+    if (st_local("varlab") != "") {
+        for (j=1; j<=nv; j++) {
+            s = st_varlabel(idx[j])
+            if (s != "") {
+                _writeinput_put(fh, scrn,
+                    "** var: " + vars[j] + "  label: " + s)
+            }
+        }
+    }
+
+    // input statement
+    _writeinput_put(fh, scrn, st_local("inp_line"))
+
+    // data rows
+    for (i=1; i<=N; i++) {
+        line = ""
+        for (j=1; j<=nv; j++) {
+            if (st_isstrvar(idx[j])) {
+                s = cqo + st_sdata(i, idx[j]) + cqc
+            }
+            else {
+                s = _writeinput_num(st_data(i, idx[j]),
+                    st_vartype(idx[j]), prec)
+            }
+            line = line + (j > 1 ? " " : "") + s
+        }
+        _writeinput_put(fh, scrn, line)
+    }
+
+    // footer
+    _writeinput_put(fh, scrn, "end")
+    if (st_local("note") != "") {
+        _writeinput_put(fh, scrn, "** " + st_local("note"))
+    }
+    if (st_local("truncated") == "1") {
+        _writeinput_put(fh, scrn,
+            "** Truncated to " + st_local("maxobs") + " observations")
+    }
+
+    if (md != "") _writeinput_put(-1, scrn, "```")
+    else if (dry != "") printf("{txt}{hline}\n")
+
+    if (fh >= 0) fclose(fh)
+}
+
 end

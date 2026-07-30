@@ -1,0 +1,582 @@
+
+  ___  ____  ____  ____  ____ ®
+ /__    /   ____/   /   ____/      StataNow 19.5
+___/   /   /___/   /   /___/       MP—Parallel Edition
+
+ Statistics and Data Science       Copyright 1985-2025 StataCorp LLC
+                                   StataCorp
+                                   4905 Lakeway Drive
+                                   College Station, Texas 77845 USA
+                                   800-782-8272        https://www.stata.com
+                                   979-696-4600        service@stata.com
+
+Stata license: 4-user 4-core network, expiring  6 May 2027
+Serial number: 501909369296
+  Licensed to: Eric Booth
+               TX2036
+
+Notes:
+      1. Stata is running in batch mode.
+      2. Unicode is supported; see help unicode_advice.
+      3. More than 2 billion observations are allowed; see help obs_advice.
+      4. Maximum number of variables is set to 5,000 but can be increased;
+          see help set_maxvar.
+
+
+Running /Users/ebooth/Documents/Stata/profile.do ...
+/Users/ebooth/.config/stata-googlesheets/client_secret_168706661500-h518nlu65no
+> jbc4bprhn896kunie8r44.apps.googleusercontent.com.json
+1
+
+. do test_writeinput.do 
+
+. * test_writeinput.do -- behavioral contract for writeinput
+. * run from the repo directory: stata-mp -b do test_writeinput.do
+. * then grep the log for ALL TESTS PASSED
+. clear all
+
+. adopath ++ "`c(pwd)'"
+  [1]              "/Users/ebooth/Documents/GitHub/Writeinput-Stata"
+  [2]  (BASE)      "/Applications/StataNow/ado/base/"
+  [3]  (SITE)      "/Applications/StataNow/ado/site/"
+  [4]              "."
+  [5]  (PERSONAL)  "/Users/ebooth/Documents/Stata/ado/personal/"
+  [6]  (PLUS)      "/Users/ebooth/Library/Application Support/Stata/ado/plus/"
+  [7]  (OLDPLACE)  "~/ado/"
+
+. set varabbrev off
+
+. set linesize 120
+
+. 
+. * --- (1) round-trip: string+numeric mix (the v3.0.0 blank-row bug) ----------
+. sysuse auto, clear
+(1978 automobile data)
+
+. keep in 1/3
+(71 observations deleted)
+
+. keep make price mpg
+
+. tempfile orig1
+
+. save "`orig1'"
+file /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000001 saved as .dta format
+
+. tempfile stub1
+
+. loc g1 "`stub1'.do"
+
+. writeinput make price mpg using "`g1'", replace
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000002.do
+
+. assert r(nobs) == 3
+
+. assert r(nvars) == 3
+
+. assert "`r(varlist)'" == "make price mpg"
+
+. assert r(truncated) == 0
+
+. assert "`r(filename)'" == "`g1'"
+
+. * data rows must actually contain the data, not blanks
+. mata: st_local("hit", strofreal(max(strpos(cat("`g1'"), "AMC Concord")) > 0))
+
+. assert `hit' == 1
+
+. do "`g1'"
+
+. clear
+
+. input str18 make int price int mpg
+
+                   make     price       mpg
+  1. `"AMC Concord"' 4099 22
+  2. `"AMC Pacer"' 4749 17
+  3. `"AMC Spirit"' 3799 22
+  4. end
+
+. 
+end of do-file
+
+. assert _N == 3
+
+. cf _all using "`orig1'"
+
+. 
+. * --- (2) round-trip: special characters in string data ----------------------
+. clear
+
+. set obs 5
+Number of observations (_N) was 0, now 5.
+
+. gen str60 s = ""
+(5 missing values generated)
+
+. replace s = `"embedded "double quotes" here"' in 1
+(1 real change made)
+
+. replace s = "apostrophe's, comma, semi; colon:" in 2
+(1 real change made)
+
+. replace s = "dollar " + char(36) + "USD and " + char(36) + "{global}" in 3
+(1 real change made)
+
+. replace s = "back" + char(96) + "tick and " + char(96) + "local" + char(39) + " ref" in 4
+(1 real change made)
+
+. replace s = "unicode: cafe au lait, naive, checkmark" in 5
+(1 real change made)
+
+. replace s = "unicode: caf" + char(233) + " " + uchar(10003) in 5
+(1 real change made)
+
+. gen int n = _n
+
+. tempfile orig2
+
+. save "`orig2'"
+file /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000003 saved as .dta format
+
+. tempfile stub2
+
+. loc g2 "`stub2'.do"
+
+. writeinput s n using "`g2'", replace
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000004.do
+
+. do "`g2'"
+
+. clear
+
+. input str60 s int n
+
+                                                                s         n
+  1. `"embedded "double quotes" here"' 1
+  2. `"apostrophe's, comma, semi; colon:"' 2
+  3. `"dollar $USD and ${global}"' 3
+  4. `"back`tick and `local' ref"' 4
+  5. `"unicode: caf� ✓"' 5
+  6. end
+
+. 
+end of do-file
+
+. assert _N == 5
+
+. cf _all using "`orig2'"
+
+. * spot-check the two nastiest values survived verbatim
+. assert s[3] == "dollar " + char(36) + "USD and " + char(36) + "{global}"
+
+. assert s[4] == "back" + char(96) + "tick and " + char(96) + "local" + char(39) + " ref"
+
+. 
+. * --- (3) round-trip: missing values (regular + extended) --------------------
+. clear
+
+. set obs 4
+Number of observations (_N) was 0, now 4.
+
+. gen int a = _n
+
+. replace a = .  in 1
+(1 real change made, 1 to missing)
+
+. replace a = .a in 2
+(1 real change made, 1 to missing)
+
+. replace a = .z in 3
+(1 real change made, 1 to missing)
+
+. gen double d = 1/7
+
+. replace d = .b in 2
+(1 real change made, 1 to missing)
+
+. gen str8 s = "x"
+
+. replace s = "" in 3
+(1 real change made)
+
+. tempfile orig3
+
+. save "`orig3'"
+file /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000005 saved as .dta format
+
+. tempfile stub3
+
+. loc g3 "`stub3'.do"
+
+. writeinput a d s using "`g3'", replace
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000006.do
+
+. do "`g3'"
+
+. clear
+
+. input int a double d str8 s
+
+            a           d          s
+  1. . .1428571428571428492 `"x"'
+  2. .a .b `"x"'
+  3. .z .1428571428571428492 `""'
+  4. 4 .1428571428571428492 `"x"'
+  5. end
+
+. 
+end of do-file
+
+. cf _all using "`orig3'"
+
+. assert a[1] == . & a[2] == .a & a[3] == .z & a[4] == 4
+
+. assert d[2] == .b & d[1] == 1/7
+
+. assert s[3] == ""
+
+. 
+. * --- (4) numeric precision: float/double exact by default; hex; formats -----
+. clear
+
+. set obs 3
+Number of observations (_N) was 0, now 3.
+
+. gen float f = _n/3
+
+. gen double d = _pi*_n
+
+. tempfile orig4
+
+. save "`orig4'"
+file /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000007 saved as .dta format
+
+. tempfile stub4
+
+. loc g4 "`stub4'.do"
+
+. writeinput f d using "`g4'", replace
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000008.do
+
+. do "`g4'"
+
+. clear
+
+. input float f double d
+
+             f           d
+  1. .3333333433 3.141592653589793116
+  2. .6666666865 6.283185307179586232
+  3. 1 9.424777960769379348
+  4. end
+
+. 
+end of do-file
+
+. cf _all using "`orig4'"
+
+. * precision(hex) is bit-exact and runnable
+. use "`orig4'", clear
+
+. tempfile stub4x
+
+. loc g4x "`stub4x'.do"
+
+. writeinput d using "`g4x'", replace precision(hex)
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000009.do
+
+. mata: st_local("hex", strofreal(max(strpos(cat("`g4x'"), "X+")) > 0))
+
+. assert `hex' == 1
+
+. do "`g4x'"
+
+. clear
+
+. input double d
+
+              d
+  1. +1.921fb54442d18X+001
+  2. +1.921fb54442d18X+002
+  3. +1.2d97c7f3321d2X+003
+  4. end
+
+. 
+end of do-file
+
+. assert d[1] == _pi & d[2] == 2*_pi & d[3] == 3*_pi
+
+. * explicit precision() format is honored
+. sysuse auto, clear
+(1978 automobile data)
+
+. keep in 1/1
+(73 observations deleted)
+
+. tempfile stub4f
+
+. loc g4f "`stub4f'.do"
+
+. writeinput price using "`g4f'", replace precision(%12.4f)
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000a.do
+
+. mata: st_local("fmt", strofreal(max(strpos(cat("`g4f'"), "4099.0000")) > 0))
+
+. assert `fmt' == 1
+
+. 
+. * --- (5) dryrun prints the block (visible in batch logs) --------------------
+. sysuse auto, clear
+(1978 automobile data)
+
+. keep in 1/3
+(71 observations deleted)
+
+. tempfile lstub
+
+. loc dlog "`lstub'_d.log"
+
+. log using "`dlog'", text name(wtest)
+------------------------------------------------------------------------------------------------------------------------
+      name:  wtest
+       log:  /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000b_d.log
+  log type:  text
+ opened on:  30 Jul 2026, 07:26:01
+
+. writeinput make price mpg, dryrun
+------------------------------------------------------------------------------------------------------------------------
+Generated Input Command
+-----------------------
+------------------------------------------------------------------------------------------------------------------------
+clear
+input str18 make int price int mpg
+`"AMC Concord"' 4099 22
+`"AMC Pacer"' 4749 17
+`"AMC Spirit"' 3799 22
+end
+------------------------------------------------------------------------------------------------------------------------
+
+. log close wtest
+      name:  wtest
+       log:  /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000b_d.log
+  log type:  text
+ closed on:  30 Jul 2026, 07:26:01
+------------------------------------------------------------------------------------------------------------------------
+
+. mata: t = cat("`dlog'")
+
+. mata: st_local("h1", strofreal(max(strpos(t, "input str18 make int price int mpg")) > 0))
+
+. mata: st_local("h2", strofreal(max(strpos(t, "AMC Concord")) > 0))
+
+. mata: st_local("h3", strofreal(sum(t :== "end")))
+
+. assert `h1' == 1 & `h2' == 1 & `h3' >= 1
+
+. 
+. * --- (6) markdown prints a fenced block (visible in batch logs) -------------
+. loc mlog "`lstub'_m.log"
+
+. log using "`mlog'", text name(wtest)
+------------------------------------------------------------------------------------------------------------------------
+      name:  wtest
+       log:  /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000b_m.log
+  log type:  text
+ opened on:  30 Jul 2026, 07:26:01
+
+. writeinput make price mpg, markdown
+```stata
+clear
+input str18 make int price int mpg
+`"AMC Concord"' 4099 22
+`"AMC Pacer"' 4749 17
+`"AMC Spirit"' 3799 22
+end
+```
+
+. log close wtest
+      name:  wtest
+       log:  /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000b_m.log
+  log type:  text
+ closed on:  30 Jul 2026, 07:26:01
+------------------------------------------------------------------------------------------------------------------------
+
+. mata: t = cat("`mlog'")
+
+. mata: st_local("h1", strofreal(sum(t :== char((96,96,96)) + "stata")))
+
+. mata: st_local("h2", strofreal(sum(t :== char((96,96,96)))))
+
+. mata: st_local("h3", strofreal(max(strpos(t, "AMC Pacer")) > 0))
+
+. assert `h1' == 1 & `h2' == 1 & `h3' == 1
+
+. 
+. * --- (7) replace overwrites; missing replace/append refuses -----------------
+. writeinput make price mpg using "`g1'", replace
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000002.do
+
+. assert r(nobs) == 3
+
+. cap noi writeinput make price mpg using "`g1'"
+File /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.000002.do exists; specify 'replace' or 'append' option
+
+. assert _rc == 198
+
+. 
+. * --- (8) append stacks a second block ----------------------------------------
+. tempfile stub8
+
+. loc g8 "`stub8'.do"
+
+. writeinput make using "`g8'", replace
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000c.do
+
+. writeinput make using "`g8'", append
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000c.do
+
+. mata: st_local("nin", strofreal(sum(strpos(cat("`g8'"), "input ") :== 1)))
+
+. assert `nin' == 2
+
+. 
+. * --- (9) if/in honored; maxobs truncates and says so ------------------------
+. sysuse auto, clear
+(1978 automobile data)
+
+. tempfile stub9
+
+. loc g9 "`stub9'.do"
+
+. writeinput make price if foreign == 1 using "`g9'", replace
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000d.do
+
+. assert r(nobs) == 22
+
+. writeinput make price using "`g9'", replace maxobs(10)
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000d.do
+
+. assert r(truncated) == 1
+
+. assert r(nobs) == 10
+
+. mata: st_local("trn", strofreal(max(strpos(cat("`g9'"), "** Truncated to 10 observations")) > 0))
+
+. assert `trn' == 1
+
+. do "`g9'"
+
+. clear
+
+. input str18 make int price
+
+                   make     price
+  1. `"AMC Concord"' 4099
+  2. `"AMC Pacer"' 4749
+  3. `"AMC Spirit"' 3799
+  4. `"Buick Century"' 4816
+  5. `"Buick Electra"' 7827
+  6. `"Buick LeSabre"' 5788
+  7. `"Buick Opel"' 4453
+  8. `"Buick Regal"' 5189
+  9. `"Buick Riviera"' 10372
+ 10. `"Buick Skylark"' 4082
+ 11. end
+
+. ** Truncated to 10 observations
+. 
+end of do-file
+
+. assert _N == 10
+
+. 
+. * --- (10) noclear, header(), and note() land where promised -----------------
+. sysuse auto, clear
+(1978 automobile data)
+
+. keep in 1/2
+(72 observations deleted)
+
+. tempfile stub10
+
+. loc g10 "`stub10'.do"
+
+. writeinput make using "`g10'", replace noclear header(** generated by test) note(round-trip contract)
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000e.do
+
+. mata: t = cat("`g10'")
+
+. mata: st_local("nc", strofreal(sum(t :== "clear")))
+
+. mata: st_local("hd", strofreal(max(strpos(t, "** generated by test")) > 0))
+
+. mata: st_local("nt", strofreal(max(strpos(t, "** round-trip contract")) > 0))
+
+. assert `nc' == 0 & `hd' == 1 & `nt' == 1
+
+. 
+. * --- (11) varlab writes variable-label comments ------------------------------
+. lab var make "Make and model"
+
+. tempfile stub11
+
+. loc g11 "`stub11'.do"
+
+. writeinput make using "`g11'", replace varlab
+  0
+
+Output file written to: /var/folders/m5/kjpsn7r16wv1n3ndj6xvb70m0000gn/T//St99040.00000f.do
+
+. mata: st_local("vl", strofreal(max(strpos(cat("`g11'"), "** var: make  label: Make and model")) > 0))
+
+. assert `vl' == 1
+
+. 
+. * --- (12) error contracts -----------------------------------------------------
+. cap noi writeinput make
+must specify 'using filename', 'dryrun', or 'markdown'
+
+. assert _rc == 198
+
+. cap noi writeinput make, dryrun precision(banana)
+invalid precision() format: banana
+
+. assert _rc == 120
+
+. tempfile stub12
+
+. cap noi writeinput make if price < 0 using "`stub12'.do", replace
+no observations
+
+. assert _rc == 2000
+
+. 
+. di as res "ALL TESTS PASSED"
+ALL TESTS PASSED
+
+. 
+end of do-file
