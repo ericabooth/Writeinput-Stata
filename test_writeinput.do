@@ -254,4 +254,90 @@ confirm file "`d'/out file.do"
 erase "`d'/out file.do"
 rmdir "`d'"
 
+* --- (14) 3.0.3 regressions ---------------------------------------------------
+* (14a) quoted header()/note() lose one layer of quotes; the file runs
+sysuse auto, clear
+tempfile f14
+writeinput make price in 1/2 using "`f14'.do", replace header("** Project X | Date: $S_DATE") note("hello note")
+mata: T = cat("`f14'.do")
+mata: st_local("h", strofreal(substr(T[1], 1, 12) == "** Project X"))
+mata: st_local("n", strofreal(anyof(T, "** hello note")))
+assert `h' == 1 & `n' == 1
+do "`f14'.do"
+assert _N == 2
+sysuse auto, clear
+writeinput make in 1/1 using "`f14'.do", replace header(`"** compound "q" header"')
+mata: st_local("h", strofreal(cat("`f14'.do")[1] == `"** compound "q" header"'))
+assert `h' == 1
+* (14b) values input cannot hold verbatim round-trip through replace lines
+clear
+set obs 6
+gen str60 s = "ends with tick " + char(96) in 1
+replace s = `"he said "hi" "' + char(96) in 2
+replace s = "line A" + char(10) + "line B" + char(13) + char(10) + "C" in 3
+replace s = "open " + char(96) + char(34) + "nested and close " + char(34) + char(39) + " " + char(36) + "x " + char(92) + char(96) + "y" + char(39) in 4
+replace s = "caf" + uchar(233) + " " + char(92) + char(36) + "HOME " + char(96) in 5
+replace s = "plain" in 6
+gen x = _n
+gen str5 t = "z"
+tempfile o14 g14
+save "`o14'"
+writeinput s x t using "`g14'.do", replace
+do "`g14'.do"
+assert _N == 6
+cf _all using "`o14'"
+* (14c) labels keeps codes that have no label text
+clear
+input byte g
+1
+2
+3
+.
+.a
+end
+label define gl 1 "one" 2 "two"
+label values g gl
+tempfile g14c
+writeinput g using "`g14c'.do", labels replace
+do "`g14c'.do"
+assert g[1] == "one" & g[2] == "two" & g[3] == "3" & g[4] == "" & g[5] == ".a"
+* (14d) floats round-trip at small and large magnitudes
+clear
+set obs 4
+gen float f = 1.2345678e-10 in 1
+replace f = 98765.43 in 2
+replace f = 1/3 in 3
+replace f = 123456789 in 4
+tempfile o14d g14d
+save "`o14d'"
+writeinput f using "`g14d'.do", replace
+do "`g14d'.do"
+cf _all using "`o14d'"
+* (14e) generic with v# names present, in any order
+clear
+set obs 2
+gen v2 = 1
+gen v1 = 2
+gen a = 3
+writeinput v2 v1, generic dryrun
+assert "`r(varlist)'" == "v1 v2"
+writeinput a, generic dryrun
+assert "`r(varlist)'" == "v1"
+confirm variable v2 v1 a
+* (14f) nocl abbreviation, negative sample(), .do inside the path
+sysuse auto, clear
+writeinput price in 1/2, dryrun nocl
+cap noi writeinput price in 1/2, sample(-1) dryrun
+assert _rc == 198
+loc d "`c(tmpdir)'/wi my.docs"
+mata: st_local("de", strofreal(direxists(st_local("d"))))
+if !`de' {
+    mkdir "`d'"
+}
+writeinput make in 1/2 using "`d'/mwe", replace
+confirm file "`d'/mwe.do"
+assert "`r(filename)'" == "`d'/mwe.do"
+erase "`d'/mwe.do"
+rmdir "`d'"
+
 di as res "ALL TESTS PASSED"
