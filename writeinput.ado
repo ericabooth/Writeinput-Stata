@@ -1,11 +1,43 @@
 *! writeinput - advanced dataset-to-input command generator
 *! Eric A. Booth <eric.a.booth@gmail.com>
-*! Version 3.0.1 : Jul 2026
+*! Version 3.0.2 : Nov 2026
+** Version 3.0.2 : Nov 2026 (fix: frame() parses varlist/if/in inside the target
+**                frame, and the caller's frame is restored on any error)
+** Version 3.0.1 : Jul 2026
 ** Version 3.0.0 : May 2026
 ** Version 2.0.0 : May 2026
 ** Version 1.0.1 : Mar 2011
 
 program define writeinput, rclass
+    version 16
+
+    *-- Handle Frame.  frame() is pulled out before the full parse, because
+    *-- syntax checks varlist, if, in, and sort() against the data in the
+    *-- CURRENT frame.  The body is then parsed and run inside the target
+    *-- frame through the frame prefix, which restores the caller's frame
+    *-- whether the body succeeds or fails.  (No if-prefix one-liners here:
+    *-- "if exp command" expands its command a second time, which would eat
+    *-- backticks in note()/header() text.)
+    _parse comma lhs rhs : 0
+    loc 0 `"`macval(rhs)'"'
+    syntax [, Frame(name) * ]
+    if "`frame'" != "" {
+        mata: st_local("fexists", strofreal(st_frameexists(st_local("frame"))))
+        if "`fexists'" != "1" {
+            di as err "Frame `frame' not found"
+            exit 111
+        }
+        loc opts `", `macval(options)'"'
+        frame `frame': _writeinput_body `macval(lhs)' `macval(opts)'
+        return add
+        exit
+    }
+    _writeinput_body `macval(lhs)' `macval(rhs)'
+    return add
+end
+
+
+program define _writeinput_body, rclass
     version 16
     syntax varlist [if] [in] [using/] [, ///
         Replace noCLEAR Append ///
@@ -13,17 +45,7 @@ program define writeinput, rclass
         Labels Dates Dryrun Markdown ///
         Precision(str) Maxobs(integer 500) ///
         Sort(varlist) Sample(integer 0) Seed(integer 0) ///
-        Varlab Generic Frame(name) ]
-
-    *-- Handle Frame
-    if "`frame'" != "" {
-        loc original_frame "`c(frame)'"
-        cap frame change `frame'
-        if _rc {
-            di as err "Frame `frame' not found"
-            exit 111
-        }
-    }
+        Varlab Generic ]
 
     *-- Handle 'using' and 'dryrun'
     if "`using'" == "" & "`dryrun'" == "" & "`markdown'" == "" {
@@ -78,7 +100,6 @@ program define writeinput, rclass
         if _N == 0 {
             noi di as err "no observations"
             restore
-            if "`original_frame'" != "" frame change `original_frame'
             exit 2000
         }
 
@@ -146,7 +167,6 @@ program define writeinput, rclass
         return scalar truncated = `truncated'
 
         restore
-        if "`original_frame'" != "" frame change `original_frame'
     }
 end
 

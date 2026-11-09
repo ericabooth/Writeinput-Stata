@@ -184,4 +184,74 @@ tempfile stub12
 cap noi writeinput make if price < 0 using "`stub12'.do", replace
 assert _rc == 2000
 
+* --- (13) frame(): parse inside the target frame, restore caller on error ---
+* (13a) variables exist only in the target frame
+sysuse auto, clear
+frame create other
+frame other {
+    set obs 3
+    gen a = _n
+    gen b = _n*2
+    gen str20 s = "x"
+}
+writeinput a b, frame(other) dryrun
+assert r(nobs) == 3 & r(nvars) == 2 & "`r(varlist)'" == "a b"
+assert c(frame) == "default"
+assert _N == 74
+* if/in/sort() evaluated in the target frame
+writeinput a b if b > 2 in 1/3, frame(other) sort(b) dryrun
+assert r(nobs) == 2
+assert c(frame) == "default"
+* round trip from the other frame to a file
+tempfile f1
+writeinput a b s using "`f1'.do", frame(other) replace
+frame create chk
+frame chk: do "`f1'.do"
+frame chk: assert _N == 3 & a[3] == 3 & b[3] == 6 & s[1] == "x"
+frame drop chk
+assert c(frame) == "default" & _N == 74
+* (13b) error after the frame switch returns the user to the caller's frame
+cap writeinput a b using "`c(tmpdir)'/nonexistent_dir_wi/x.do", frame(other) replace
+assert _rc == 603
+assert c(frame) == "default"
+cap writeinput nosuchvar, frame(other) dryrun
+assert _rc == 111
+assert c(frame) == "default"
+cap writeinput a b in 1/0, frame(other) dryrun
+assert _rc != 0
+assert c(frame) == "default"
+* (13c) missing frame
+cap writeinput a, frame(nosuch) dryrun
+assert _rc == 111
+* (13d) frame() naming the current frame works
+writeinput price mpg in 1/2, frame(default) dryrun
+assert r(nobs) == 2
+* (13e) option text with $, backticks, commas, quotes survives the re-parse,
+*     with and without frame()
+loc nt = "cost " + char(36) + "5, a " + char(96) + "tick" + char(39) + " and " + char(34) + "q" + char(34)
+* (never call writeinput behind an if-prefix here: that re-expands the line)
+tempfile f2
+writeinput price in 1/1 using "`f2'.do", replace note(`macval(nt)') header(** h `macval(nt)')
+mata: T = cat("`f2'.do")
+mata: st_local("okn", strofreal(anyof(T, "** " + st_local("nt"))))
+mata: st_local("okh", strofreal(anyof(T, "** h " + st_local("nt"))))
+assert `okn' == 1 & `okh' == 1
+tempfile f3
+writeinput a in 1/1 using "`f3'.do", replace note(`macval(nt)') header(** h `macval(nt)') frame(other)
+mata: T = cat("`f3'.do")
+mata: st_local("okn", strofreal(anyof(T, "** " + st_local("nt"))))
+mata: st_local("okh", strofreal(anyof(T, "** h " + st_local("nt"))))
+assert `okn' == 1 & `okh' == 1
+assert c(frame) == "default"
+* (13f) using path containing a comma and spaces
+loc d "`c(tmpdir)'/wi dir, comma"
+mata: st_local("de", strofreal(direxists(st_local("d"))))
+if !`de' {
+    mkdir "`d'"
+}
+writeinput a b using "`d'/out file.do", frame(other) replace
+confirm file "`d'/out file.do"
+erase "`d'/out file.do"
+rmdir "`d'"
+
 di as res "ALL TESTS PASSED"

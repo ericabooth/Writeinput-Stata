@@ -81,7 +81,13 @@ writeinput age inc race, sample(20) seed(123) sort(age) generic markdown
 | `maxobs(#)` | Cap the number of rows (default 500). |
 | `varlab` | Embed variable labels as comments. |
 | `generic` | Anonymize variables as v1, v2, ... |
-| `frame(name)` | Pull data from a specific Stata Frame. |
+| `frame(name)` | Pull data from another Stata frame. The varlist, `if`, `in`, and `sort()` refer to that frame, and you stay in your current frame, even if the command fails. |
+
+---
+
+## 📝 Changes
+
+- **3.0.2 (Nov 2026):** `frame(name)` now works when the variables exist only in the named frame (earlier versions checked the varlist against the current frame and stopped with "variable not found"). An error inside the named frame no longer leaves you switched into it.
 
 ---
 

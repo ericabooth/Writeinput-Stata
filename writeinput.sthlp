@@ -1,5 +1,5 @@
 {smcl}
-{* May2026}{...}
+{* Nov2026}{...}
 {hline}
 help for {hi:writeinput}
 {hline}
@@ -34,7 +34,7 @@ help for {hi:writeinput}
 {title:Description}
 
 {p 4 4 2}
-{cmd:writeinput} (v3.0.1) is a robust utility for generating reproducible Stata
+{cmd:writeinput} (v3.0.2) is a robust utility for generating reproducible Stata
 {help input} code from data currently in memory. It is specifically designed to 
 facilitate sharing "Minimum Working Examples" (MWEs) on forums like Statalist 
 or technical support emails.
@@ -88,7 +88,10 @@ Stata syntax highlighting, ready for pasting into GitHub or Stack Overflow. {p_e
 
 {p 4 8 2}
 {cmd:frame(}{it:name}{cmd:)} allows you to pull data from a specific Stata 16+ 
-frame without leaving your current workspace. {p_end}
+frame without leaving your current workspace. The {it:varlist}, {cmd:if}, {cmd:in}, 
+and {cmd:sort()} all refer to the variables in frame {it:name}, which need not exist 
+in the current frame. You remain in your current frame afterward, even if 
+{cmd:writeinput} stops with an error. {p_end}
 
 {p 4 8 2}
 {cmd:append} allows adding the generated code to the end of an existing file. {p_end}
